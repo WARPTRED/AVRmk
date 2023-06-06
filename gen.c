@@ -8,24 +8,20 @@
 #define  VFG_PORT PORTB
 
 #define CS    PORTD3     // Chip select
-#define DO    PORTB6     // MISO or Data Out
+#define DO    PORTB5     // MISO or Data Out
 #define USCK  PORTB7     // Clock
 
-typedef union //объединение
+typedef union 
 {
   unsigned long int w   ;     // w as WORD
-  unsigned int h[2];     // h as HALF-WORD
-  unsigned char  b[4];     // b as BYTE
+  unsigned int h[2];          // h as HALF-WORD
+  unsigned char  b[4];        // b as BYTE
 } Union32;
+Union32 dFi;
 
 unsigned int fG;
-unsigned int fG1;
-unsigned int fG2;
-unsigned int fG3;
 unsigned char nG;
-unsigned char nG1;
 unsigned int N[]={1,8,64,256,1024};
-Union32 dFi;
 unsigned char flag_RT = 0;
 unsigned char ch_num = 0;
 
@@ -36,10 +32,10 @@ volatile unsigned char index = 0;  // this is to send back the right element in 
 
 void SpiSlaveInit() {
     #asm("cli")
-    USICR = ((1<<USIWM0)|(1<<USICS1)); // Activate 3- Wire Mode and use of external clock but NOT the interrupt at the Counter overflow (USIOIE)
-    PORTB |= 1<<CS;                     // Activate Pull-Up resistor on PB0
+    USICR = ((1<<USIWM0)|(1<<USICS1));  // Activate 3- Wire Mode and use of external clock but NOT the interrupt at the Counter overflow (USIOIE)
+    PORTD |= 1<<CS;                     // Activate Pull-Up resistor on PD3
     PCMSK|=1<<CS;                       // Active Interrupt on PD3
-    GIMSK|=1<<PCIE; // General Interrupt Mask Register / PCIE bit activates external interrupts
+    GIMSK|=1<<PCIE;                     // General Interrupt Mask Register / PCIE bit activates external interrupts
     #asm("sei")
 }
 
@@ -50,13 +46,12 @@ interrupt [EXT_INT1] void ext_int1_isr(void) {
 
 // If edge is falling, the command and index variables shall be initialized
 // and the 4-bit overflow counter of the USI communication shall be activated:
-
     reqID = 0;
     index = 0;
 	flag_RT = 0;
     USICR |= (1<<USIOIE);
     USISR = 1<<USIOIF;      // Clear Overflow bit
-    }
+    }  
     else{
 // If edge is rising, turn the 4-bit overflow interrupt off:     
     USICR &= ~(1<<USIOIE);
@@ -86,51 +81,11 @@ switch(reqID) {
 		reqID++;
 		flag_RT = 1;
 	break;
-
-
-
-// Switch-Case to respond according to request from Master:
-    case 0:             // If reqID value is zero (just initialized), then first message is the reqID.
-    reqID = USIDR;      // Read in from USIDR register
-    USISR = 1<<USIOIF;  // Clear Overflow bit
-	reqID++;
-    break;          
-    case 'T':
-	case 1:
-		reqID++;
-	break;
-    case 'T':
-// Write value to send back into USIDR and clear the overflow bit:
-    USIDR = nG1;
-    USISR = 1<<USIOIF;       
-    index++;            // Increment index to transmit the folloing element next
-    break;          
-    case 'H':        
-// Write value to send back into USIDR and clear the overflow bit:
-    USIDR = fG1; 
-    USISR = 1<<USIOIF; 
-    index++;            // Increment index to transmit the folloing element next
-    break;
-// Write value to send back into USIDR and clear the overflow bit:
-    case 'B': 
-    USIDR = fG2; 
-    USISR = 1<<USIOIF; 
-    index++;            // Increment index to transmit the folloing element next
-    break;    
-// Write value to send back into USIDR and clear the overflow bit:
-    case 'I': 
-    USIDR = fG3; 
-    USISR = 1<<USIOIF; 
-    index++;            // Increment index to transmit the folloing element next
-    break;    
-    default:
-// Default option of Switch-Case. Send 'reqID' back for debugging.
-    USIDR = reqID;
-    USISR = 1<<USIOIF;          
     }      
 }
 
 //***********************************************timer1************************************************
+
 void Tim1Init(void)
 {
     #asm("cli")
@@ -140,7 +95,7 @@ void Tim1Init(void)
     #asm("sei")
 }
 
-void SetUpTim1A(unsigned int Foc)    //set value OCR1A register
+void SetUpTim1A(unsigned int Foc)    //calculate value OCR1A register
 {
  unsigned int TimDiv;
  unsigned char ClockSelect=0;
@@ -158,7 +113,7 @@ void SetUpTim1A(unsigned int Foc)    //set value OCR1A register
     #asm("sei")
 }
 
-void UpdateTim1A(unsigned int freq) //хранение старого значения
+void UpdateTim1A(unsigned int freq) //old value storage
 {
 	static unsigned int fG_old = 0;
 
@@ -169,7 +124,7 @@ void UpdateTim1A(unsigned int freq) //хранение старого значения
 	}
 }
 
-void set_out_pin (unsigned char num){
+void set_out_pin (unsigned char num){ //output pin selection
  nG=1<<num;
  VFG_DDR = nG;
 }
@@ -188,13 +143,16 @@ void main(void)
   
 #asm("sei")
 for(;;) {
- if (fG_old != fG) {   //проверка, не изменилось ли старое значение
+ if (fG_old != fG) {   //old value detction
     SetUpTim1A(fG);
     fG_old = fG;
     }
- nG= nG1  & 0x03;     //номер генератора
- fG=fG1+fG2+fG3;     //частота генератора
+
+ nG= ch_num;                         //generator number
+ fG= dFi.b[0]+dFi.b[1]+dFi.b[2];     //generator frequency
+ if (flag_RT = 1) {
  set_out_pin (nG);
  SetUpTim1A(fG);
+ }
  }
 }
